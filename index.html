@@ -45,7 +45,7 @@
    ===================================================================== */
 
 /* ---------- 1. CORE ---------- */
-const W = 1280, H = 720, DUR = 60, BPM = 100, BEAT = 60 / BPM, FPS = 30;
+const W = 1280, H = 720, DUR = 66, BPM = 100, BEAT = 60 / BPM, FPS = 30;
 const B = b => b * BEAT;                         // beats -> seconds
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
 const lerp = (a, b, u) => a + (b - a) * u;
@@ -850,10 +850,60 @@ function shEnd(lt, t) {
   const [lxw, lyw] = ledWorld(pip), keep = { x: W / 2 + (lxw - cam.x) * cam.z, y: H / 2 + (lyw - cam.y) * cam.z, a: 1 - sstep(3.2, 3.6, lt) };
   return { cam, dark: .9, lights: L, chars: [pip, bolt], scene, reveal: 1 - sstep(2.7, 3.5, lt), keep };
 }
+/* ---------- END CREDITS: single-stroke hand-lettered glyphs (no fonts) ---------- */
+const GLY = (() => {
+  const A = (cx, cy, r, a0, a1, n = 14) => { const p = []; for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; p.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } return p; };
+  const O = A(2.5, 2.5, 2.5, 90, 450, 20), arch = (cx, r, x1) => A(cx, 2.8, r, 180, 0, 10).concat([x1, 0]);
+  return { o: [5.5, [O]], a: [6, [O, [5, 5, 5, 0]]], b: [6, [[0, 10, 0, 0], O]], c: [5.5, [A(2.5, 2.5, 2.5, 40, 320)]], d: [6, [O, [5, 10, 5, 0]]],
+    e: [5.5, [[0, 2.5, 5, 2.5].concat(A(2.5, 2.5, 2.5, 0, 315, 18))]], g: [6, [O, [5, 5, 5, -1.2].concat(A(2.5, -1.2, 2.5, 0, -160, 10))]],
+    h: [6, [[0, 10, 0, 0], arch(2.5, 2.5, 5)]], l: [2, [[0, 10, 0, 0]]], n: [6, [[0, 5, 0, 0], arch(2.5, 2.5, 5)]],
+    m: [8, [[0, 5, 0, 0], A(1.75, 3.2, 1.75, 180, 0, 8).concat([3.5, 0]), A(5.25, 3.2, 1.75, 180, 0, 8).concat([7, 0])]],
+    p: [6, [[0, 5, 0, -3.5], O]], r: [4.5, [[0, 5, 0, 0], A(2.5, 2.8, 2.5, 180, 70, 6)]],
+    s: [5.5, [[4.6, 4.2, 3.5, 5, 1.5, 5, .4, 4.1, .7, 3, 2.5, 2.5, 4.3, 2, 4.6, .9, 3.5, 0, 1.5, 0, .3, .8]]],
+    t: [4.5, [[1.5, 8, 1.5, 1, 2, .2, 3, 0, 3.8, .3], [0, 5, 3.6, 5]]], w: [7.5, [[0, 5, 1.6, 0, 3.25, 4, 4.9, 0, 6.5, 5]]],
+    x: [5.5, [[0, 5, 5, 0], [5, 5, 0, 0]]], y: [5.5, [[0, 5, 2.5, 0], [5, 5, 1.5, -2.6, .3, -3.3]]], '.': [2, [[.4, .4, .7, .3]]], ' ': [3, []],
+    S: [6.8, [[5.6, 8.6, 4.3, 10, 1.7, 10, .3, 8.7, .6, 6.4, 3, 5.2, 5.4, 4, 5.8, 1.6, 4.3, 0, 1.7, 0, .2, 1.4]]],
+    E: [6.5, [[5.5, 10, 0, 10, 0, 0, 5.5, 0], [0, 5.2, 4.5, 5.2]]] };
+})();
+// writes str centred at cx on baseline by (u px per unit), revealing prog 0..1 of total stroke length; returns pen tip
+function strokeText(ctx, str, cx, by, u, prog, o = {}) {
+  const sp = 1.1; let wsum = -sp; for (const ch of str) wsum += (GLY[ch] ? GLY[ch][0] : 4) + sp;
+  let x = cx - wsum * u / 2; const polys = [];
+  for (const ch of str) { const g = GLY[ch]; if (!g) { x += 4 * u; continue; } for (const p of g[1]) { const q = []; for (let i = 0; i < p.length; i += 2) q.push(x + p[i] * u, by - p[i + 1] * u); polys.push(q); } x += (g[0] + sp) * u; }
+  const lens = polys.map(q => { let l = 0; for (let i = 2; i < q.length; i += 2) l += Math.hypot(q[i] - q[i - 2], q[i + 1] - q[i - 1]); return l; });
+  let rem = clamp(prog) * lens.reduce((a, b) => a + b, 0), tip = null;
+  for (let k = 0; k < polys.length && rem > 0; k++) {
+    let q = polys[k];
+    if (rem < lens[k]) { const out = [q[0], q[1]]; let r = rem;
+      for (let i = 2; i < q.length; i += 2) { const d = Math.hypot(q[i] - q[i - 2], q[i + 1] - q[i - 1]); if (r >= d) { out.push(q[i], q[i + 1]); r -= d; } else { const f = r / d; out.push(q[i - 2] + (q[i] - q[i - 2]) * f, q[i - 1] + (q[i + 1] - q[i - 1]) * f); break; } }
+      q = out; }
+    rem -= lens[k]; ink(ctx, q, { w: o.w ?? 3, id: (o.id ?? 2500) + k, col: o.col, amp: o.amp ?? .9 }); tip = [q[q.length - 2], q[q.length - 1]];
+  }
+  return prog > 0 && prog < 1 ? tip : null;
+}
+const CREDITS = [['powered by', 640, 250, 4.4, .3, 1.2, 2.4, 2500], ['SynExta', 640, 372, 9, 1.1, 2.5, 5.2, 2600], ['syntechnology.com', 610, 452, 5, 2.4, 3.6, 2.8, 2700]];
+function shCredits(lt, t) {
+  const cam = { x: 640, y: 360, z: lerp(1.0, 1.03, lt / 6) };
+  let tip = null;
+  const scene = (ctx, pass) => {
+    if (pass === 'wash') { const u = eout((lt - .2) / 1.8);
+      wash(ctx, 640, 330, 60 + 380 * u, 40 + 150 * u, '#9fd3c0', 2401, .35 * u); wash(ctx, 700, 345, 40 + 300 * u, 30 + 120 * u, '#f3cf8a', 2402, .3 * u); wash(ctx, 560, 440, 30 + 260 * u, 20 + 60 * u, '#c9d8e8', 2403, .25 * u); }
+    if (pass === 'ink') for (const [str, x, y, u, a, b, w, id] of CREDITS) { const tp = strokeText(ctx, str, x, y, u, (lt - a) / (b - a), { w, id, col: str === 'SynExta' ? '#23392f' : INK }); if (tp) tip = tp; }
+  };
+  const wave = sstep(3.75, 3.9, lt) * (1 - sstep(4.5, 4.7, lt));
+  const blinkE = lt > 2.0 && lt < 2.12 || lt > 4.9 && lt < 5.02;
+  const pip = mkPip({ x: 1005, y: 468, s: .85, battery: true, lx: .0, ly: 0, mouth: .6, brow: -.1, open: blinkE ? .05 : 1, aR: lerp(.3, 2.8 + Math.sin(lt * 14) * .3, wave), aL: .3, sq: Math.sin(lt * 3) * .015, led: .5 + .06 * Math.sin(lt * 5), eyeGlow: 0 });
+  const S = { cam, dark: 0, lights: [], chars: [pip], scene };
+  S.fx = ctx => { if (tip) glowDot(ctx, tip[0], tip[1], 26, '255,214,140', .8); };
+  // Pip watches the pen (tip is set during the ink pass, which runs before characters are drawn)
+  Object.defineProperty(pip, 'lx', { get: () => tip ? clamp((tip[0] - 1005) / 250, -1, 1) : lerp(-.6, 0, sstep(3.6, 3.8, lt)), enumerable: true });
+  Object.defineProperty(pip, 'ly', { get: () => tip ? clamp((tip[1] - 380) / 120, -1, 1) : 0, enumerable: true });
+  return S;
+}
 const SHOTS = [
   [0, 8, shEstablish], [8, 16, shFriends], [16, 20, shWave], [20, 21, shFlicker], [21, 22, shBreaker], [22, 24, shLightsOut],
   [24, 29, shFearClose], [29, 32, shPOV], [32, 40, shHesitate], [40, 48, shEnter], [48, 56, shSparks], [56, 64, shBattery],
-  [64, 72, shTrapped], [72, 80, shRescue], [80, 88, shReturn], [88, 94, shPower], [94, 100, shEnd]
+  [64, 72, shTrapped], [72, 80, shRescue], [80, 88, shReturn], [88, 94, shPower], [94, 100, shEnd], [100, 110, shCredits]
 ];
 
 /* ---------- 7. RENDERER: wash -> fill -> lighting -> ink -> characters -> emit -> fx -> paper/grain ---------- */
@@ -1102,6 +1152,12 @@ function buildScore() {
   // K. the glow within (94-100)
   theme(92, THEME_A, 72, MAJ, musicBox, .28, 0); pad(96, 4, [48, 55, 64, 67], .045); at(98, piano, 36, B(3), .2, 0); at(98, piano, 48, B(3), .14, 0);
   for (const b of [94, 96, 98]) at(b, heart, .12);
+  // L. end credits (100-110): quiet reprise while the pen of light writes
+  pad(100, 4, [53, 57, 60], .035); pad(104, 5, [48, 55, 64, 67], .035);
+  theme(101, THEME_A, 84, MAJ, musicBox, .15, .2, 4); theme(104.5, THEME_A.filter(n => n[0] >= 4).map(([o, d, u]) => [o - 4, d, u]), 84, MAJ, musicBox, .15, .2);
+  for (const [, , , , a, b] of CREDITS) for (let s = a; s < b; s += .09) atS(B(100) + s, hiss, .05, .01 + .006 * hash(Math.round(s * 100), 7), -.2 + .4 * hash(Math.round(s * 100), 8));
+  atS(B(100) + 3.8, chirp, 900, 1500, .15, .06, .5); atS(B(100) + 4.1, chirp, 1100, 1700, .12, .05, .5);
+  [48, 55, 64, 72].forEach(m => at(107, piano, m, B(3), .11, 0));
   E.sort((a, b) => a.t - b.t); return E;
 }
 function humLevel(t) { if (t < B(21)) return t < TB ? 1 : .6 + .4 * powerAt(t); if (t < B(22.3)) return lerp(.6, 0, (t - B(21)) / (B(22.3) - B(21))); if (t < TR) return 0; return clamp((t - TR) / 1.2); }
@@ -1172,7 +1228,7 @@ window.renderAudioWav = async (from = 0, to = DUR) => {
 (function boot() {
   CV = $('film'); CTX = CV.getContext('2d'); MC = mk(W, H); MCTX = MC.getContext('2d'); SC = mk(W, H); SCTX = SC.getContext('2d');
   if (/[?&]render/.test(location.search) || window.__RENDER) document.body.classList.add('render');
-  makeTextures(CTX); EV = buildScore();
+  makeTextures(CTX); EV = buildScore(); $('scrub').max = DUR;
   for (let pass = 0; pass < 2; pass++) for (const s of SHOTS) render(B((s[0] + s[1]) / 2));   // warm lazy caches so first renders match later ones
   render(0); window.__ready = true;
   if (!document.body.classList.contains('render')) initUI();
