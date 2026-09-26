@@ -439,14 +439,15 @@ function fgPosts(cam, t, opts = {}) {
 }
 // big grey cabinet with a dark maintenance hatch at ground level (the scary gap)
 const GX = 1372;
-function darkCab(ctx, pass, x, openAmt = 1) {
+function darkCab(ctx, pass, x, openAmt = 1, dim = 0) {
   const x0 = x - 125, top = 300, h0 = 392, hx0 = x - 56, hw = 112;
   if (pass === 'wash') { wash(ctx, x, 420, 190, 170, '#7f9aa4', 77, .3); return; }
-  if (pass === 'fill') {
+  if (pass === 'fill' || pass === 'ink') {   // repainted in the ink pass so machine ink behind never shows and the void stays black
     fillWC(ctx, rect(x0, top, 250, 260), '#8e9ea4'); fillWC(ctx, rect(x0, top, 250, 26), '#6b7c83');
     ctx.fillStyle = '#0b0a0e'; ctx.fillRect(hx0, h0, hw, GROUND - h0);
     const dx = hw * .55 * openAmt; fillWC(ctx, [hx0 + hw, h0, hx0 + hw + dx, h0 - 14, hx0 + hw + dx, GROUND - 4, hx0 + hw, GROUND], '#9fb0b5');
     for (let i = 0; i < 6; i++) { ctx.fillStyle = '#4c5a60'; ctx.beginPath(); ctx.arc(x0 + 14 + i * 44, top + 42, 3, 0, TAU); ctx.fill(); }
+    if (pass === 'ink' && dim > .01) { ctx.fillStyle = `rgba(8,9,20,${dim})`; ctx.fillRect(x0 - 4, top - 16, 262, 264); }
   }
   if (pass === 'ink') {
     ink(ctx, rect(x0, top, 250, 260, 40), { close: true, id: 801, w: 2.4 }); ink(ctx, rect(hx0, h0, hw, GROUND - h0, 20), { close: true, id: 802, w: 2.8 });
@@ -620,7 +621,7 @@ function shFearClose(lt, t) {
 function shPOV(lt, t) {
   const VX = 900, VY = 330, cam = { x: lerp(640, 700, eio(lt / 1.8)), y: lerp(360, 345, lt / 1.8), z: lerp(1, 1.12, eio(lt / 1.8)) };
   const beeps = [30, 30.5, 31].map(b => B(b) - B(29));
-  let bb = 0; for (const b of beeps) if (lt > b) bb = Math.max(bb, Math.exp(-(lt - b) * 9));
+  let bb = 0; for (const b of beeps) if (lt > b) bb = Math.max(bb, Math.exp(-(lt - b) * 5));
   const pip = mkPip({ x: 350, y: 975, s: 3, back: true, led: pipLed(t), tremble: .3, sway: Math.sin(lt * 3) * .3 });
   const depth = i => 1 / (1 + i * .55);
   const scene = (ctx, pass) => {
@@ -639,9 +640,9 @@ function shPOV(lt, t) {
       for (let j = 0; j < 12; j++) { const s = depth(j * .6), y = VY + 12 + 770 * s * .98; ink(ctx, line(VX - 330 * s, y, VX + 330 * s, y, 2), { id: 1130 + j, w: .8 + s, pass2: false }); }
       ink(ctx, rect(VX - 50, VY - 44, 100, 56), { close: true, id: 1150 });
     }
-    if (pass === 'emit' && bb > .01) glowDot(ctx, VX, VY - 12, 26, '255,60,50', bb);
+    if (pass === 'emit' && bb > .01) { glowDot(ctx, VX, VY - 12, 46, '255,60,50', bb); glowDot(ctx, VX, VY - 12, 9, '255,220,200', bb); }
   };
-  return { cam, dark: .95, lights: [{ x: VX, y: VY - 12, r: 110, i: .9 * bb, c: '255,60,50' }, { x: VX + 300, y: VY - 200, r: 160, i: .12, c: '110,140,215' }], chars: [pip], scene };
+  return { cam, dark: .95, lights: [{ x: VX, y: VY - 12, r: 180, i: bb, c: '255,60,50' }, { x: VX + 300, y: VY - 200, r: 160, i: .12, c: '110,140,215' }], chars: [pip], scene };
 }
 const beaconPost = (x, y) => (ctx, pass) => {
   if (pass === 'fill') { fillWC(ctx, rect(x - 6, y, 12, GROUND - y), '#5b5f64'); fillWC(ctx, el(x, y - 8, 12, 14), '#c9453b'); }
@@ -818,9 +819,9 @@ function shPower(lt, t) {
   const bolt = mkBolt({ x: 1112 + drift + 20 * cheer, y: GROUND - Math.sin(cheer * Math.PI) * 50, ly: kf(lt, [[0, 0], [.2, -1], [2, -.6], [2.3, .2]]), lx: kf(lt, [[0, .4], [2.2, .4], [2.4, 1]]),
     mouth: .8, mo: kf(lt, [[0, .1], [.3, .5], [1.6, .5], [2, .2]]), aL: kf(lt, [[0, .3], [.9, .3], [1.05, 2.9], [1.8, 2.8], [2.1, .4]]), aR: kf(lt, [[0, .3], [.9, .3], [1.05, 2.9], [1.8, 2.8], [2.1, .4]]),
     sq: kf(lt, [[0, 0], [.85, .2], [1.0, -.22], [1.35, 0], [1.42, .2], [1.6, 0]]), led: .6 });
-  const L = envLights(cam, t, { lampR: 1 });
+  const L = envLights(cam, t, { lampR: 1, lampGa: .18 });
   for (const l of L) if (l.c === '255,212,140') { const k = l.seed, u = clamp((t - TR - .12 * Math.max(0, k)) / 1.3); l.r = 80 + 1100 * eout(u); }
-  return { cam, dark: .93 * (1 - sstep(1.2, 2.2, lt)), lights: L, chars: [bolt, pip], scene: factoryScene(cam, t, { extra: (c, p) => darkCab(c, p, GX, 1) }) };
+  return { cam, dark: .93 * (1 - sstep(1.2, 2.2, lt)), lights: L, chars: [bolt, pip], scene: factoryScene(cam, t, { extra: (c, p) => darkCab(c, p, GX, 1, .9 * (1 - sstep(.15, .8, lt))) }) };
 }
 function shEnd(lt, t) {
   const cam = { x: lerp(640, 620, lt / 3.6), y: lerp(420, 440, lt / 3.6), z: lerp(1.0, 1.16, eio(lt / 3.6)) };
@@ -877,7 +878,7 @@ function lighting(g, cam, dark, L) {
   camApply(g, cam); g.globalCompositeOperation = 'screen';
   for (const l of L) {
     if (l.rect) { const [x, y, w, h] = l.rect; wash(g, x + w / 2, y + h / 2, w * .9, h * .8, '#ffe2b0', 88, .25 * l.i, 'screen'); continue; }
-    const a = l.i * (l.ga ?? (dark > .3 ? .42 : .2)); if (a < .01) continue;
+    const a = l.i * (l.ga ?? lerp(.2, .42, sstep(.1, .5, dark))); if (a < .01) continue;
     const gr = g.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * .8); gr.addColorStop(0, `rgba(${l.c},${a})`); gr.addColorStop(1, `rgba(${l.c},0)`); g.fillStyle = gr; g.fillRect(l.x - l.r, l.y - l.r, 2 * l.r, 2 * l.r);
     wash(g, l.x, l.y, l.r * .55, l.r * .45, rgbHex(l.c.split(',').map(Number)), (l.seed || 7) + 40, a * .7, 'screen');
   }
@@ -905,7 +906,7 @@ function render(t) {
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.fillStyle = '#efe6d2'; g.fillRect(0, 0, W, H);
   camApply(g, cam); S.scene(g, 'wash'); camApply(g, cam); S.scene(g, 'fill');
   const L = (S.lights || []).slice(), bots = S.chars || [];
-  for (const b of bots) if (b.led > .02) { const [x, y] = ledWorld(b); L.push({ x, y, r: (80 + 300 * Math.min(b.led, 1.2)) * Math.sqrt(b.s), i: Math.min(1, .3 + .7 * b.led), c: b.kind === 'pip' ? '255,214,140' : '255,95,72', ga: dark > .3 ? .5 : .08, seed: b.id }); }
+  for (const b of bots) if (b.led > .02) { const [x, y] = ledWorld(b); L.push({ x, y, r: (80 + 300 * Math.min(b.led, 1.2)) * Math.sqrt(b.s), i: Math.min(1, .3 + .7 * b.led), c: b.kind === 'pip' ? '255,214,140' : '255,95,72', ga: lerp(.2, .5, sstep(.1, .5, dark)), seed: b.id }); }
   lighting(g, cam, dark, L);
   camApply(g, cam); S.scene(g, 'ink');
   for (const b of bots) { b.eyeGlow = b.eyeGlow ?? dark * .55; const lit = litAt(L, b.x, b.y - 70 * b.s); drawLit(g, cam, c => drawBot(c, b), dark * (1 - lit)); }
